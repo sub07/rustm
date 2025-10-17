@@ -6,5 +6,10 @@
     "label": "run r",
     "command": "cargo",
     "args": ["run"]
+  },
+  {
+    "label": "run c",
+    "command": "cargo",
+    "args": ["check"]
   }
 ]

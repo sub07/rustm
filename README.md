@@ -33,3 +33,5 @@ cargo install --git https://github.com/sub07/rustm.git
 Of course made with Rust.
 
 The TUI is built using [Cursive](https://github.com/gyscos/Cursive).
+
+This project is built using agentic AI.
