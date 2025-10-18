@@ -14,9 +14,14 @@
 //! surfaces, navigation) can be layered atop these scaffolds.
 
 mod config;
+
 mod logging;
+
+mod theme;
 mod project {
+
     pub mod create;
+
     pub mod list;
 }
 
@@ -77,6 +82,7 @@ const fn reason_variant(r: &SetupReason) -> &'static str {
 /// Extremely bare-bones; no validation feedback loop beyond error dialog.
 fn initial_setup_flow(reason: &SetupReason) {
     let mut siv = cursive::default();
+    theme::apply_theme(&mut siv);
 
     let msg = match reason {
         SetupReason::MissingFile => "Welcome! Let's set up rustm.".to_string(),
@@ -137,6 +143,7 @@ fn launch_post_setup(siv: &mut Cursive, config: Config) {
 /// Run the main TUI with a simple global menu.
 fn run_main_tui(config: Config) {
     let mut siv = cursive::default();
+    theme::apply_theme(&mut siv);
     siv.add_layer(main_menu_view(config));
     siv.run();
 }
