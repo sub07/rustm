@@ -1,0 +1,15 @@
+// Project tasks configuration. See https://zed.dev/docs/tasks for documentation.
+//
+// Example:
+[
+  {
+    "label": "run r",
+    "command": "cargo",
+    "args": ["run"]
+  },
+  {
+    "label": "run c",
+    "command": "cargo",
+    "args": ["check"]
+  }
+]

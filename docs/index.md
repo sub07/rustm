@@ -1,6 +1,6 @@
-# Features overview
+# Overview
 
-`rustm` can run in two modes: `global` and `project`.
+`rustm` is a TUI built with cursive that can be run in two modes: `global` and `project`.
 
 ## Global mode
 

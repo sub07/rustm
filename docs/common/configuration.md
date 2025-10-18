@@ -21,4 +21,8 @@ For serialization and deserialization of the configuration file, we will use the
 
 The procedure for loading the configuration will be as follows: Read and deserialize it into a `ConfigInner` struct. The struct will be wrapped by an Arc in a new `Config` struct to allow cheap cloning. The `Config` struct will expose all string-like configuration fields as methods that return `&str`. Also the struct won't use Option types for the fields, as they are required. If the file is missing or any field is missing, we will present the user the initial setup screen. If the file is present but the deserialization fails, we will show an error message and exit the program. I do not accept unstable state like empty or blank strings in the configuration.
 
+
 The implementation of this feature will be in its own module called `config`, located at `src/config.rs`. The module will expose the `Config` struct and a function to load and save the configuration from file.
+
+Additionally, the application stores its log file `rustm.log` in the same configuration directory (i.e. `<platform_config_dir>/rustm`, alongside `config.yaml`). This keeps configuration and operational logs co-located for easier inspection and cleanup. No rotation is performed; the logging strategy is simplified per the updated requirements.
+

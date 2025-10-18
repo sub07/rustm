@@ -1,9 +1,29 @@
 # Log
 
-I want to keep a log of significant actions performed by the program, such as creating a new project or opening a project in the editor. This log will help me track my activities and troubleshoot any issues that may arise.
-We will use the `log` crate for logging, along with the `simplelog` crate to provide a simple logging implementation that writes logs to a file. The log file will be located in the same way as the configuration file, using the standard log directory for the operating system with the `dirs` crate.
+We maintain a log of significant actions performed by the program (e.g. creating a new project, listing projects, opening a project in the editor) to aid traceability and troubleshooting.
 
-During the implementation of features, we will add log statements at appropriate levels (e.g., `Info`, `Warn`, `Error`) to capture significant actions and events. The log file will be rotated when it reaches a certain size to prevent it from growing indefinitely. Every log level above INFO (which is included) will be logged. The size theshold of the rotation strategy will be 5MB.
-In debug builds (debug_assertions cfg enabled), we will log _all_ levels.
+We use the `log` crate together with `simplelog` (WriteLogger) writing to a single file `rustm.log`.
 
-The configuration of the logger will be located in its own module called `logging`, located at `src/logging.rs`. The module will expose a function to initialize the logger, which will be called at the _absolute_ start of the program.
+Location: the log file lives in the same configuration directory as `config.yaml` (`<platform_config_dir>/rustm/rustm.log`), resolved via `dirs::config_dir()`. No separate platform log dir is used to keep operational artifacts co-located.
+
+`cursive_core` should not log to this file; only application-level events are recorded.
+
+Rotation: removed (no size-based rotation). The file simply grows; future optimization can introduce rotation if required.
+
+Levels:
+
+- Release builds: log all events with level >= INFO (INFO, WARN, ERROR).
+- Debug builds (cfg(debug_assertions)): log all levels including TRACE and DEBUG.
+
+Initialization:
+
+- A module `logging` at `src/logging.rs` exposes an `init_logging()` function.
+- It MUST be invoked at the absolute start of `main` before other subsystems so early failures are captured.
+- The initializer is idempotent (subsequent calls are no-ops) and appends to the existing file.
+
+Usage guidance:
+
+- Log user-facing, state-changing actions at INFO (project creation start/success, list operation).
+- Log recoverable anomalies at WARN (failed attempt to set git default branch, non-fatal git status errors).
+- Log unrecoverable errors or abort conditions at ERROR.
+- Use DEBUG/TRACE (debug builds only) for deeper diagnostics when implementing or investigating issues.
