@@ -10,3 +10,6 @@ log = "0"
 simplelog = "0"
 joy-error = { git = "https://github.com/sub07/rust-utils", version = "0.5.0", features = ["log-crate"] }
 itertools = "0"
+dirs = "6"
+serde = { version = "1", features = ["derive"] }
+serde_norway = "0"

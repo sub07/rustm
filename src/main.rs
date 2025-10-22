@@ -1,3 +1,4 @@
+mod config;
 mod project;
 
 use std::{fmt::Display, path::PathBuf};
@@ -5,7 +6,16 @@ use std::{fmt::Display, path::PathBuf};
 use anyhow::bail;
 use log::warn;
 
-use crate::project::Project;
+use crate::{
+    config::{Config, RawConfig},
+    project::Project,
+};
+
+fn dir() -> anyhow::Result<PathBuf> {
+    Ok(dirs::config_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?
+        .join("rustm"))
+}
 
 pub enum Mode {
     Global {
@@ -30,18 +40,18 @@ impl Mode {
         })
     }
 
-    pub fn from_env() -> anyhow::Result<Self> {
+    pub fn from_env(config: Config) -> anyhow::Result<Self> {
         Project::current()?.map_or_else(
-            || Self::load_global(r"C:\Users\mpardo\repos\".into()),
+            || Self::load_global(config.projects_dir().to_owned()),
             |project| Ok(Self::Project { project }),
         )
     }
 
-    pub fn switch_to_global(&mut self) -> anyhow::Result<()> {
+    pub fn switch_to_global(&mut self, config: Config) -> anyhow::Result<()> {
         if matches!(self, Self::Global { .. }) {
             warn!("Switching to global mode while already in global mode");
         }
-        *self = Self::load_global(r"C:\Users\mpardo\repos\".into())?;
+        *self = Self::load_global(config.projects_dir().to_owned())?;
         Ok(())
     }
 
@@ -66,8 +76,34 @@ impl Mode {
     }
 }
 
+fn init_config() -> anyhow::Result<Config> {
+    let mut raw_config = RawConfig::check()?;
+
+    if raw_config.projects_dir.is_none() {
+        let projects_dir: String = inquire::Text::new("Enter projects directory:").prompt()?;
+        raw_config.projects_dir = Some(projects_dir);
+    }
+
+    if raw_config.editor_cmd.is_none() {
+        let editor_cmd: String = inquire::Text::new("Enter editor command:").prompt()?;
+        raw_config.editor_cmd = Some(editor_cmd);
+    }
+
+    raw_config.save()?;
+
+    Config::load()
+}
+
 fn main() -> anyhow::Result<()> {
-    let mut mode = Mode::from_env()?;
+    simplelog::WriteLogger::init(
+        simplelog::LevelFilter::Warn,
+        simplelog::Config::default(),
+        std::fs::File::create(dir()?.join("rustm.log"))?,
+    )?;
+
+    let config = init_config()?;
+
+    let mut mode = Mode::from_env(config.clone())?;
     loop {
         match mode {
             Mode::Global {
@@ -166,7 +202,7 @@ fn main() -> anyhow::Result<()> {
 
                 let prompt_response = inquire::Select::new("Project mode", prompts).prompt()?;
                 match prompt_response {
-                    ProjectModeOption::GlobalMode => mode.switch_to_global()?,
+                    ProjectModeOption::GlobalMode => mode.switch_to_global(config.clone())?,
                     ProjectModeOption::Exit => return Ok(()),
                 }
             }
