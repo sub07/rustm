@@ -23,7 +23,7 @@ struct ConfigInner {
     editor_cmd: String,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct RawConfig {
     pub projects_dir: Option<String>,
     pub editor_cmd: Option<String>,

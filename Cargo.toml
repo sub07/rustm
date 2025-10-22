@@ -13,3 +13,4 @@ itertools = "0"
 dirs = "6"
 serde = { version = "1", features = ["derive"] }
 serde_norway = "0"
+rust-fsm = "0"

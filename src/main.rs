@@ -1,5 +1,7 @@
 mod config;
 mod project;
+mod prompt;
+mod state;
 
 use std::{fmt::Display, path::PathBuf};
 
@@ -9,6 +11,8 @@ use log::warn;
 use crate::{
     config::{Config, RawConfig},
     project::Project,
+    prompt::global::GlobalModeOption,
+    state::{Action, ViewStateMachine},
 };
 
 fn dir() -> anyhow::Result<PathBuf> {
@@ -79,18 +83,6 @@ impl Mode {
 fn init_config() -> anyhow::Result<Config> {
     let mut raw_config = RawConfig::check()?;
 
-    if raw_config.projects_dir.is_none() {
-        let projects_dir: String = inquire::Text::new("Enter projects directory:").prompt()?;
-        raw_config.projects_dir = Some(projects_dir);
-    }
-
-    if raw_config.editor_cmd.is_none() {
-        let editor_cmd: String = inquire::Text::new("Enter editor command:").prompt()?;
-        raw_config.editor_cmd = Some(editor_cmd);
-    }
-
-    raw_config.save()?;
-
     Config::load()
 }
 
@@ -101,111 +93,161 @@ fn main() -> anyhow::Result<()> {
         std::fs::File::create(dir()?.join("rustm.log"))?,
     )?;
 
-    let config = init_config()?;
+    // let config = init_config()?;
 
-    let mut mode = Mode::from_env(config.clone())?;
+    let mut view_state = ViewStateMachine::new();
+
     loop {
-        match mode {
-            Mode::Global {
-                ref projects_path,
-                ref current_project,
-                ref projects,
-                ref mut list_projects,
-            } => {
-                if *list_projects {
-                    enum ProjectListOption<'a> {
-                        SelectProject(&'a str),
-                        Back,
-                    }
-
-                    impl Display for ProjectListOption<'_> {
-                        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                            match self {
-                                Self::SelectProject(project_name) => {
-                                    write!(f, "{project_name}")
-                                }
-                                Self::Back => write!(f, "Back"),
-                            }
-                        }
-                    }
-
-                    let mut prompts = projects
-                        .iter()
-                        .map(|project| ProjectListOption::SelectProject(project.name.as_str()))
-                        .collect::<Vec<_>>();
-
-                    prompts.push(ProjectListOption::Back);
-
-                    let prompt_response = inquire::Select::new("Projects", prompts).prompt()?;
-
-                    match prompt_response {
-                        ProjectListOption::SelectProject(project) => println!("{project} selected"),
-                        ProjectListOption::Back => *list_projects = false,
-                    }
+        match view_state.state() {
+            state::State::Initial => {
+                let raw_config = RawConfig::check()?;
+                if raw_config.editor_cmd.is_none() || raw_config.projects_dir.is_none() {
+                    view_state.consume(Action::SetupConfig(raw_config));
                 } else {
-                    enum GlobalModeOption<'a> {
-                        ListProjects,
-                        CurrentProject(&'a str),
-                        Exit,
-                    }
-
-                    impl Display for GlobalModeOption<'_> {
-                        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                            match self {
-                                Self::ListProjects => write!(f, "List Projects"),
-                                Self::CurrentProject(current_project) => {
-                                    write!(f, "Current Project ({current_project})")
-                                }
-                                Self::Exit => write!(f, "Exit"),
-                            }
-                        }
-                    }
-
-                    let mut prompts = Vec::new();
-                    prompts.push(GlobalModeOption::ListProjects);
-
-                    if let Some(current_project) = current_project {
-                        prompts.push(GlobalModeOption::CurrentProject(
-                            current_project.name.as_str(),
-                        ));
-                    }
-
-                    prompts.push(GlobalModeOption::Exit);
-
-                    let prompt_response =
-                        inquire::Select::new("Choose action", prompts).prompt()?;
-                    match prompt_response {
-                        GlobalModeOption::ListProjects => {
-                            *list_projects = true;
-                        }
-                        GlobalModeOption::CurrentProject(_) => mode.switch_to_project()?,
-                        GlobalModeOption::Exit => return Ok(()),
-                    }
+                    let config = Config::load()?;
+                    view_state.consume(Action::ChooseProjectOrGlobalMode(config));
                 }
             }
-            Mode::Project { .. } => {
-                enum ProjectModeOption {
-                    GlobalMode,
-                    Exit,
+            state::State::ConfigSetupView(raw_config) => {
+                let mut raw_config = raw_config.clone();
+                if raw_config.projects_dir.is_none() {
+                    let projects_dir: String = prompt::config::project_dirs()?;
+                    raw_config.projects_dir = Some(projects_dir);
                 }
 
-                impl Display for ProjectModeOption {
-                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        match self {
-                            Self::GlobalMode => write!(f, "Global Mode"),
-                            Self::Exit => write!(f, "Exit"),
-                        }
-                    }
+                if raw_config.editor_cmd.is_none() {
+                    let editor_cmd: String = prompt::config::editor_cmd()?;
+                    raw_config.editor_cmd = Some(editor_cmd);
                 }
 
-                let prompts = vec![ProjectModeOption::GlobalMode, ProjectModeOption::Exit];
-
-                let prompt_response = inquire::Select::new("Project mode", prompts).prompt()?;
+                raw_config.save()?;
+                view_state.consume(Action::EndSetup);
+            }
+            state::State::ProjectOrGlobalAutomaticDetection(config) => {
+                if let Some(project) = Project::current()? {
+                    view_state.consume(Action::OpenProjectMode(config.clone(), project));
+                } else {
+                    view_state.consume(Action::OpenGlobalMode(config.clone()));
+                }
+            }
+            state::State::GlobalView(config) => {
+                let prompt_response = prompt::global::root()?;
                 match prompt_response {
-                    ProjectModeOption::GlobalMode => mode.switch_to_global(config.clone())?,
-                    ProjectModeOption::Exit => return Ok(()),
+                    GlobalModeOption::ListProjects => view_state.consume(Action::OpenProjectList),
+                    GlobalModeOption::CurrentProject(project) => {
+                        view_state.consume(Action::OpenProjectMode(config.clone(), project));
+                    }
+                    GlobalModeOption::Exit => return Ok(()),
                 }
             }
+            state::State::ProjectView(config, project) => todo!(),
+            state::State::ProjectListView => todo!(),
         }
     }
+
+    // let mut mode = Mode::from_env(config.clone())?;
+    // loop {
+    //     match mode {
+    //         Mode::Global {
+    //             ref projects_path,
+    //             ref current_project,
+    //             ref projects,
+    //             ref mut list_projects,
+    //         } => {
+    //             if *list_projects {
+    //                 enum ProjectListOption<'a> {
+    //                     SelectProject(&'a str),
+    //                     Back,
+    //                 }
+
+    //                 impl Display for ProjectListOption<'_> {
+    //                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    //                         match self {
+    //                             Self::SelectProject(project_name) => {
+    //                                 write!(f, "{project_name}")
+    //                             }
+    //                             Self::Back => write!(f, "Back"),
+    //                         }
+    //                     }
+    //                 }
+
+    //                 let mut prompts = projects
+    //                     .iter()
+    //                     .map(|project| ProjectListOption::SelectProject(project.name.as_str()))
+    //                     .collect::<Vec<_>>();
+
+    //                 prompts.push(ProjectListOption::Back);
+
+    //                 let prompt_response = inquire::Select::new("Projects", prompts).prompt()?;
+
+    //                 match prompt_response {
+    //                     ProjectListOption::SelectProject(project) => println!("{project} selected"),
+    //                     ProjectListOption::Back => *list_projects = false,
+    //                 }
+    //             } else {
+    //                 enum GlobalModeOption<'a> {
+    //                     ListProjects,
+    //                     CurrentProject(&'a str),
+    //                     Exit,
+    //                 }
+
+    //                 impl Display for GlobalModeOption<'_> {
+    //                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    //                         match self {
+    //                             Self::ListProjects => write!(f, "List Projects"),
+    //                             Self::CurrentProject(current_project) => {
+    //                                 write!(f, "Current Project ({current_project})")
+    //                             }
+    //                             Self::Exit => write!(f, "Exit"),
+    //                         }
+    //                     }
+    //                 }
+
+    //                 let mut prompts = Vec::new();
+    //                 prompts.push(GlobalModeOption::ListProjects);
+
+    //                 if let Some(current_project) = current_project {
+    //                     prompts.push(GlobalModeOption::CurrentProject(
+    //                         current_project.name.as_str(),
+    //                     ));
+    //                 }
+
+    //                 prompts.push(GlobalModeOption::Exit);
+
+    //                 let prompt_response =
+    //                     inquire::Select::new("Choose action", prompts).prompt()?;
+    //                 match prompt_response {
+    //                     GlobalModeOption::ListProjects => {
+    //                         *list_projects = true;
+    //                     }
+    //                     GlobalModeOption::CurrentProject(_) => mode.switch_to_project()?,
+    //                     GlobalModeOption::Exit => return Ok(()),
+    //                 }
+    //             }
+    //         }
+    //         Mode::Project { .. } => {
+    //             enum ProjectModeOption {
+    //                 GlobalMode,
+    //                 Exit,
+    //             }
+
+    //             impl Display for ProjectModeOption {
+    //                 fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    //                     match self {
+    //                         Self::GlobalMode => write!(f, "Global Mode"),
+    //                         Self::Exit => write!(f, "Exit"),
+    //                     }
+    //                 }
+    //             }
+
+    //             let prompts = vec![ProjectModeOption::GlobalMode, ProjectModeOption::Exit];
+
+    //             let prompt_response = inquire::Select::new("Project mode", prompts).prompt()?;
+    //             match prompt_response {
+    //                 ProjectModeOption::GlobalMode => mode.switch_to_global(config.clone())?,
+    //                 ProjectModeOption::Exit => return Ok(()),
+    //             }
+    //         }
+    //     }
+    // }
 }
