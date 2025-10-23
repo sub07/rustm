@@ -23,9 +23,12 @@ pub mod root {
 }
 
 pub mod create_new {
-    use std::{fmt::Display, path::Path};
+    use std::fmt::Display;
 
-    use crate::project::{Project, ProjectType};
+    use crate::{
+        config::Config,
+        project::{Project, ProjectType},
+    };
 
     impl Display for ProjectType {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -36,7 +39,7 @@ pub mod create_new {
         }
     }
 
-    pub fn prompt(project_dir: &Path) -> anyhow::Result<Project> {
+    pub fn prompt(config: &Config) -> anyhow::Result<Project> {
         let project_name = inquire::Text::new("Project name:").prompt()?;
         let project_type = inquire::Select::new(
             "Project type:",
@@ -44,6 +47,19 @@ pub mod create_new {
         )
         .prompt()?;
 
-        Project::create(&project_name, &project_type, project_dir)
+        let project = Project::create(&project_name, &project_type, config.projects_dir())?;
+
+        let should_open = inquire::Confirm::new(&format!(
+            "Open the project now with your editor ({})?",
+            config.editor_cmd()
+        ))
+        .with_default(true)
+        .prompt()?;
+
+        if should_open {
+            project.open_in_editor(config.editor_cmd())?;
+        }
+
+        Ok(project)
     }
 }

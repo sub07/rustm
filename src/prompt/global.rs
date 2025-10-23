@@ -24,7 +24,7 @@ pub mod root {
     }
 
     pub fn prompt() -> anyhow::Result<SelectOption> {
-        let mut prompts = vec![SelectOption::ListProjects, SelectOption::NewProject];
+        let mut prompts = vec![SelectOption::NewProject, SelectOption::ListProjects];
 
         if let Some(current_project) = Project::current()? {
             prompts.push(SelectOption::CurrentProject(current_project));

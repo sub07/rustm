@@ -85,4 +85,12 @@ impl Project {
         manifest.complete_from_path(&cargo_toml_path)?;
         Ok(manifest)
     }
+
+    pub fn open_in_editor(&self, editor_cmd: &str) -> anyhow::Result<()> {
+        let mut cmd = std::process::Command::new(editor_cmd);
+        cmd.arg(&self.path);
+        info!("Opening project in editor: {cmd:?}");
+        ensure!(cmd.status()?.success(), "Could not open project in editor");
+        Ok(())
+    }
 }
