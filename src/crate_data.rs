@@ -26,7 +26,7 @@ impl CrateData {
         }
     }
 
-    pub fn load_crate(api: &crate_api::Client, crate_name: &str) -> anyhow::Result<Self> {
+    pub fn from_name(api: &crate_api::Client, crate_name: &str) -> anyhow::Result<Self> {
         let dto = api.get_crate(crate_name)?;
         Ok(Self::from_crate_api(dto))
     }

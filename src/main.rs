@@ -14,7 +14,7 @@ use crate::{
     config::{Config, RawConfig},
     project::Project,
     prompt::global::root::SelectOption,
-    state::{Action, ViewStateMachine},
+    state::View,
 };
 
 fn dir() -> anyhow::Result<PathBuf> {
@@ -55,64 +55,61 @@ fn main() -> anyhow::Result<()> {
     let config = init_config()?;
     let crate_api = crate_api::Client::new()?;
 
-    let mut view_state = ViewStateMachine::new();
+    let mut view = View::ProjectOrGlobalAutomaticDetection;
 
     loop {
-        match view_state.state() {
-            state::State::Initial => {
-                view_state.consume(Action::ChooseProjectOrGlobalMode);
-            }
-            state::State::ProjectOrGlobalAutomaticDetection => {
+        match view {
+            state::View::ProjectOrGlobalAutomaticDetection => {
                 if let Some(project) = Project::current()? {
-                    view_state.consume(Action::OpenProjectMode(project));
+                    view = View::Project(project);
                 } else {
-                    view_state.consume(Action::OpenGlobalMode);
+                    view = View::Global;
                 }
             }
-            state::State::GlobalView => {
+            state::View::Global => {
                 let response = prompt::global::root::prompt()?;
                 match response {
                     SelectOption::NewProject => {
-                        view_state.consume(Action::OpenNewProject);
+                        view = View::NewProject;
                     }
                     SelectOption::ListProjects => {
-                        view_state.consume(Action::OpenProjectList);
+                        view = View::ProjectList;
                     }
                     SelectOption::CurrentProject(project) => {
-                        view_state.consume(Action::OpenProjectMode(project));
+                        view = View::Project(project);
                     }
                     SelectOption::Exit => return Ok(()),
                 }
             }
-            state::State::ProjectListView => {
+            state::View::ProjectList => {
                 let response = prompt::global::project_list::prompt(config.projects_dir())?;
                 match response {
                     prompt::global::project_list::SelectOption::SelectProject(project) => {
-                        view_state.consume(Action::OpenProjectMode(project));
+                        view = View::Project(project);
                     }
                     prompt::global::project_list::SelectOption::Back => {
-                        view_state.consume(Action::OpenGlobalMode);
+                        view = View::Global;
                     }
                 }
             }
-            state::State::ProjectView(project) => {
+            state::View::Project(project) => {
                 println!("{} [{}]", project.name, project.path.display());
                 let response = prompt::project::root::prompt()?;
                 match response {
                     prompt::project::root::SelectOption::GlobalMode => {
-                        view_state.consume(Action::OpenGlobalMode);
+                        view = View::Global;
                     }
                     prompt::project::root::SelectOption::Exit => return Ok(()),
                 }
             }
-            state::State::NewProjectView => {
+            state::View::NewProject => {
                 let project = prompt::project::create_new::prompt(&config)?;
                 println!(
                     "Project {} created at {}",
                     project.name,
                     project.path.display()
                 );
-                view_state.consume(Action::OpenProjectMode(project));
+                view = View::Project(project);
             }
         }
     }
