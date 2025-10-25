@@ -14,5 +14,10 @@
     "env": {
       "RUST_BACKTRACE": "1"
     }
+  },
+  {
+    "label": "run t",
+    "command": "cargo",
+    "args": ["test"]
   }
 ]

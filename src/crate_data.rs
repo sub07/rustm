@@ -4,6 +4,7 @@ use crate::crate_api;
 
 #[derive(Debug)]
 pub struct CrateData {
+    pub name: String,
     pub latest_version: String,
     pub default_features: Vec<String>,
     pub features: Vec<String>,
@@ -12,14 +13,14 @@ pub struct CrateData {
 impl CrateData {
     pub fn from_crate_api(dto: crate_api::dto::get_crate::Root) -> Self {
         let version = dto.versions.first().expect("Should be one version");
-        let default_features = version.features.get("default").cloned().unwrap_or_default();
         let features = version.features.keys().cloned().collect_vec();
-        debug_assert!(
+        let default_features = {
+            let mut default_features = version.features.get("default").cloned().unwrap_or_default();
+            default_features.retain(|feature| features.contains(feature));
             default_features
-                .iter()
-                .all(|default_feature| features.contains(default_feature))
-        );
+        };
         Self {
+            name: dto.crate_data.name,
             latest_version: dto.crate_data.default_version,
             default_features,
             features,

@@ -1,10 +1,12 @@
 mod config;
 mod crate_api;
 mod crate_data;
-mod log;
+mod logger;
+mod manifest_editor;
 mod project;
 mod prompt;
 mod state;
+mod state_handler;
 
 use std::path::PathBuf;
 
@@ -12,8 +14,6 @@ use anyhow::Context;
 
 use crate::{
     config::{Config, RawConfig},
-    project::Project,
-    prompt::global::root::SelectOption,
     state::View,
 };
 
@@ -50,66 +50,44 @@ fn init_config() -> anyhow::Result<Config> {
 }
 fn main() -> anyhow::Result<()> {
     init_dir()?;
-    log::init()?;
+    logger::init()?;
 
     let config = init_config()?;
     let crate_api = crate_api::Client::new()?;
 
-    let mut view = View::ProjectOrGlobalAutomaticDetection;
+    let mut view = View::Initial;
+
+    macro_rules! handle {
+        ($h:ident $(, $args:expr )* ) => {
+            match crate::state_handler::$h($($args),*) {
+                crate::state_handler::ControlFlow::UpdateView(v) => {
+                    view = v;
+                }
+                crate::state_handler::ControlFlow::Exit => return Ok(()),
+            }
+        };
+    }
 
     loop {
         match view {
-            state::View::ProjectOrGlobalAutomaticDetection => {
-                if let Some(project) = Project::current()? {
-                    view = View::Project(project);
-                } else {
-                    view = View::Global;
-                }
+            View::Initial => handle!(initial),
+            View::Global => handle!(global),
+            View::ProjectList => handle!(project_list, &config),
+            View::Project(project) => handle!(project, project),
+            View::NewProject => handle!(new_project, &config),
+            View::ProjectDependencyList(project) => {
+                handle!(project_dependency_list, project, &crate_api);
             }
-            state::View::Global => {
-                let response = prompt::global::root::prompt()?;
-                match response {
-                    SelectOption::NewProject => {
-                        view = View::NewProject;
-                    }
-                    SelectOption::ListProjects => {
-                        view = View::ProjectList;
-                    }
-                    SelectOption::CurrentProject(project) => {
-                        view = View::Project(project);
-                    }
-                    SelectOption::Exit => return Ok(()),
-                }
+            View::ProjectDependencyDetail(project, crate_data, dependency) => {
+                handle!(project_dependency_detail, project, crate_data, dependency);
             }
-            state::View::ProjectList => {
-                let response = prompt::global::project_list::prompt(config.projects_dir())?;
-                match response {
-                    prompt::global::project_list::SelectOption::SelectProject(project) => {
-                        view = View::Project(project);
-                    }
-                    prompt::global::project_list::SelectOption::Back => {
-                        view = View::Global;
-                    }
-                }
-            }
-            state::View::Project(project) => {
-                println!("{} [{}]", project.name, project.path.display());
-                let response = prompt::project::root::prompt()?;
-                match response {
-                    prompt::project::root::SelectOption::GlobalMode => {
-                        view = View::Global;
-                    }
-                    prompt::project::root::SelectOption::Exit => return Ok(()),
-                }
-            }
-            state::View::NewProject => {
-                let project = prompt::project::create_new::prompt(&config)?;
-                println!(
-                    "Project {} created at {}",
-                    project.name,
-                    project.path.display()
+            View::ProjectDependencyFeatureToggle(project, crate_data, dependency) => {
+                handle!(
+                    project_dependency_feature_toggle,
+                    project,
+                    crate_data,
+                    dependency
                 );
-                view = View::Project(project);
             }
         }
     }

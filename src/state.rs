@@ -1,11 +1,16 @@
-use crate::project::Project;
+use cargo_toml::Dependency;
+
+use crate::{crate_data::CrateData, project::Project};
 
 pub enum View {
-    ProjectOrGlobalAutomaticDetection,
+    Initial,
 
     Global,
     NewProject,
+    ProjectList,
 
     Project(Project),
-    ProjectList,
+    ProjectDependencyList(Project),
+    ProjectDependencyDetail(Project, CrateData, Dependency),
+    ProjectDependencyFeatureToggle(Project, CrateData, Dependency),
 }

@@ -64,6 +64,8 @@ pub mod project_list {
             .collect::<Vec<_>>();
         prompts.push(SelectOption::Back);
 
-        Ok(inquire::Select::new("Projects", prompts).prompt()?)
+        Ok(inquire::Select::new("Projects", prompts)
+            .with_page_size(50)
+            .prompt()?)
     }
 }

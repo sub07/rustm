@@ -81,9 +81,7 @@ impl Project {
 
     pub fn manifest(&self) -> anyhow::Result<Manifest> {
         let cargo_toml_path = self.path.join("Cargo.toml");
-        let mut manifest = Manifest::from_path(&cargo_toml_path)?;
-        manifest.complete_from_path(&cargo_toml_path)?;
-        Ok(manifest)
+        Ok(Manifest::from_path(&cargo_toml_path)?)
     }
 
     pub fn open_in_editor(&self, editor_cmd: &str) -> anyhow::Result<()> {

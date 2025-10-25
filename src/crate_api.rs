@@ -26,6 +26,7 @@ pub mod dto {
         #[derive(serde::Deserialize, Debug)]
         pub struct Crate {
             pub default_version: String,
+            pub name: String,
         }
 
         #[derive(serde::Deserialize, Debug)]
