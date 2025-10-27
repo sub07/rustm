@@ -78,15 +78,15 @@ fn main() -> anyhow::Result<()> {
             View::ProjectDependencyList(project) => {
                 handle!(project_dependency_list, project, &crate_api);
             }
-            View::ProjectDependencyDetail(project, crate_data, dependency) => {
-                handle!(project_dependency_detail, project, crate_data, dependency);
+            View::ProjectDependencyDetail(project, crate_data) => {
+                handle!(project_dependency_detail, project, crate_data);
             }
             View::ProjectDependencyFeatureToggle(project, crate_data, dependency) => {
                 handle!(
                     project_dependency_feature_toggle,
                     project,
                     crate_data,
-                    dependency
+                    &dependency
                 );
             }
         }

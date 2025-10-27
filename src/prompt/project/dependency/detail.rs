@@ -2,8 +2,7 @@ use std::fmt::Display;
 
 pub enum SelectOption {
     Features,
-    DisableDefaultFeatures,
-    EnableDefaultFeatures,
+    SetDefaultFeatures(bool),
     RestoreManifest,
     Back,
 }
@@ -12,8 +11,13 @@ impl Display for SelectOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Features => write!(f, "Toggle features"),
-            Self::DisableDefaultFeatures => write!(f, "Disable default features"),
-            Self::EnableDefaultFeatures => write!(f, "Enable default features"),
+            Self::SetDefaultFeatures(enabled) => {
+                if *enabled {
+                    write!(f, "Enable default features")
+                } else {
+                    write!(f, "Disable default features")
+                }
+            }
             Self::RestoreManifest => write!(f, "Restore manifest backup \u{26A0}"),
             Self::Back => write!(f, "Back"),
         }
@@ -28,9 +32,9 @@ pub fn prompt(default_features_enabled: bool, has_features: bool) -> anyhow::Res
     }
 
     if default_features_enabled {
-        options.push(SelectOption::DisableDefaultFeatures);
+        options.push(SelectOption::SetDefaultFeatures(false));
     } else {
-        options.push(SelectOption::EnableDefaultFeatures);
+        options.push(SelectOption::SetDefaultFeatures(true));
     }
 
     options.push(SelectOption::RestoreManifest);

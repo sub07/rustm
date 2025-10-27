@@ -11,6 +11,6 @@ pub enum View {
 
     Project(Project),
     ProjectDependencyList(Project),
-    ProjectDependencyDetail(Project, CrateData, Dependency),
+    ProjectDependencyDetail(Project, CrateData),
     ProjectDependencyFeatureToggle(Project, CrateData, Dependency),
 }

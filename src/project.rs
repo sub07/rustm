@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{anyhow, ensure};
-use cargo_toml::Manifest;
+use cargo_toml::{Dependency, Manifest};
 use itertools::Itertools;
 use joy_error::ResultLogExt;
 use log::info;
@@ -82,6 +82,15 @@ impl Project {
     pub fn manifest(&self) -> anyhow::Result<Manifest> {
         let cargo_toml_path = self.path.join("Cargo.toml");
         Ok(Manifest::from_path(&cargo_toml_path)?)
+    }
+
+    pub fn dep(&self, dep_name: &str) -> anyhow::Result<Dependency> {
+        let manifest = self.manifest()?;
+        manifest
+            .dependencies
+            .get(dep_name)
+            .cloned()
+            .ok_or_else(|| anyhow!("Dependency {} not found in project {}", dep_name, self.name))
     }
 
     pub fn open_in_editor(&self, editor_cmd: &str) -> anyhow::Result<()> {

@@ -1,16 +1,11 @@
 use std::fmt::Display;
 
-use cargo_toml::Dependency;
 use itertools::Itertools;
 
 use crate::project::Project;
 
 pub enum SelectOption {
-    Dep {
-        name: String,
-        is_crate_io: bool,
-        dep: Dependency,
-    },
+    Dep { name: String, is_crate_io: bool },
     Back,
 }
 
@@ -39,7 +34,6 @@ pub fn prompt(project: &Project) -> anyhow::Result<SelectOption> {
         .map(|(name, dep)| SelectOption::Dep {
             name,
             is_crate_io: dep.is_crates_io(),
-            dep,
         })
         .collect_vec();
 

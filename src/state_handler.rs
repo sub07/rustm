@@ -110,14 +110,10 @@ pub fn new_project(config: &Config) -> ControlFlow {
 pub fn project_dependency_list(project: Project, crate_api: &Client) -> ControlFlow {
     use crate::prompt::project::dependency::list::SelectOption;
     match prompt::project::dependency::list::prompt(&project) {
-        Ok(SelectOption::Dep {
-            name,
-            is_crate_io,
-            dep,
-        }) => {
+        Ok(SelectOption::Dep { name, is_crate_io }) => {
             if is_crate_io {
                 match CrateData::from_name(crate_api, &name) {
-                    Ok(data) => view!(ProjectDependencyDetail(project, data, dep)),
+                    Ok(data) => view!(ProjectDependencyDetail(project, data)),
                     Err(e) => {
                         println!("Could not fetch crate data");
                         error!("Could not fetch '{name}' crate data: {e}");
@@ -140,30 +136,67 @@ pub fn project_dependency_list(project: Project, crate_api: &Client) -> ControlF
     }
 }
 
-pub fn project_dependency_detail(
-    project: Project,
-    crate_data: CrateData,
-    dep: Dependency,
-) -> ControlFlow {
+fn load_manifest_editor_or_exit(project: &Project) -> ManifestEditor {
+    match ManifestEditor::from_project(project) {
+        Ok(editor) => editor,
+        Err(e) => {
+            error!(
+                "Could not load manifest editor from project {}: {e}",
+                project.name
+            );
+            eprintln!("Fatal error when loading manifest editor (check the logs)");
+            exit(1);
+        }
+    }
+}
+
+fn save_manifest_editor_or_exit(project: &Project, manifest_editor: &ManifestEditor) {
+    if let Err(e) = manifest_editor.save() {
+        error!(
+            "Could not save manifest editor for project {}: {e}",
+            project.name
+        );
+        eprintln!("Fatal error when saving manifest editor (check the logs)");
+        exit(1);
+    }
+}
+
+pub fn project_dependency_detail(project: Project, dep_crate_data: CrateData) -> ControlFlow {
     use crate::prompt::project::dependency::detail::SelectOption;
-    println!("{} - {}", crate_data.name, project.name);
-    if !crate_data.default_features.is_empty() {
+    println!("{} - {}", dep_crate_data.name, project.name);
+    if !dep_crate_data.default_features.is_empty() {
         println!("Default features: ");
-        for feature in &crate_data.default_features {
+        for feature in &dep_crate_data.default_features {
             println!(" - {feature}");
         }
     }
 
+    let dep = match project.dep(&dep_crate_data.name) {
+        Ok(dep) => dep,
+        Err(e) => {
+            error!(
+                "Could not get dependency '{}' from project '{}': {e}",
+                dep_crate_data.name, project.name
+            );
+            eprintln!("Fatal error when loading dependency data (check the logs)");
+            exit(1);
+        }
+    };
+
     match prompt::project::dependency::detail::prompt(
         dep.default_features_enabled(),
-        !crate_data.features.is_empty(),
+        !dep_crate_data.features.is_empty(),
     ) {
         Ok(SelectOption::Back) => view!(ProjectDependencyList(project)),
         Ok(SelectOption::Features) => {
-            view!(ProjectDependencyFeatureToggle(project, crate_data, dep))
+            view!(ProjectDependencyFeatureToggle(project, dep_crate_data, dep))
         }
-        Ok(SelectOption::DisableDefaultFeatures) => todo!(),
-        Ok(SelectOption::EnableDefaultFeatures) => todo!(),
+        Ok(SelectOption::SetDefaultFeatures(enabled)) => {
+            let mut manifest_editor = load_manifest_editor_or_exit(&project);
+            manifest_editor.set_dep_features(&dep_crate_data.name, None, Some(enabled));
+            save_manifest_editor_or_exit(&project, &manifest_editor);
+            view!(ProjectDependencyDetail(project, dep_crate_data))
+        }
         Ok(SelectOption::RestoreManifest) => todo!(),
         Err(e) => {
             error!("Error in dependency detail prompt: {e}");
@@ -176,7 +209,7 @@ pub fn project_dependency_detail(
 pub fn project_dependency_feature_toggle(
     project: Project,
     dep_crate_data: CrateData,
-    manifest_dep: Dependency,
+    manifest_dep: &Dependency,
 ) -> ControlFlow {
     let default_features_enabled = manifest_dep.default_features_enabled();
 
@@ -197,17 +230,7 @@ pub fn project_dependency_feature_toggle(
 
     match prompt_res {
         Ok(newly_selected_features) => {
-            let mut manifest_editor = match ManifestEditor::from_project(&project) {
-                Ok(editor) => editor,
-                Err(e) => {
-                    error!(
-                        "Could not load manifest editor from project {}: {e}",
-                        project.name
-                    );
-                    eprintln!("Fatal error when loading manifest editor (check the logs)");
-                    exit(1);
-                }
-            };
+            let mut manifest_editor = load_manifest_editor_or_exit(&project);
 
             let some_default_features_disabled = !dep_crate_data
                 .default_features
@@ -228,20 +251,9 @@ pub fn project_dependency_feature_toggle(
                 );
             }
 
-            if let Err(e) = manifest_editor.save() {
-                error!(
-                    "Could not save manifest editor for project {}: {e}",
-                    project.name
-                );
-                eprintln!("Fatal error when saving manifest editor (check the logs)");
-                exit(1);
-            }
+            save_manifest_editor_or_exit(&project, &manifest_editor);
 
-            view!(ProjectDependencyDetail(
-                project,
-                dep_crate_data,
-                manifest_dep
-            ))
+            view!(ProjectDependencyDetail(project, dep_crate_data))
         }
         Err(e) => {
             error!("Error in dependency feature toggle prompt: {e}");

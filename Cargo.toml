@@ -14,7 +14,7 @@ dirs = "6"
 serde = {version = "1", features = ["derive"] }
 serde_norway = "0"
 cargo_toml = "0"
-reqwest = { version = "0", features = ["blocking", "json"] }
+reqwest = { version = "0", features = ["blocking", "json", "rustls-tls"], default-features = false }
 easy-ext = "1"
 toml = "0"
 toml_edit = "0"

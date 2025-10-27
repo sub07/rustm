@@ -136,7 +136,7 @@ impl ManifestEditor {
             return;
         };
 
-        if matches!(dep_format, DepFormat::Simple) {
+        if !matches!(dep_format, DepFormat::Detailed) {
             self.transform_simple_dep_to_detailed(dep_name);
         }
 
@@ -158,7 +158,8 @@ impl ManifestEditor {
 
     pub fn save(&self) -> anyhow::Result<()> {
         let toml = self.to_string();
-        std::fs::write("Cargo.test.toml", toml)?;
+        // std::fs::write("Cargo.test.toml", toml)?;
+        std::fs::write(&self.manifest_path, toml)?;
         Ok(())
     }
 }
