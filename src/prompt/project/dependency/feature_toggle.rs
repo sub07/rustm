@@ -1,10 +1,11 @@
-use inquire::MultiSelect;
+use anyhow::bail;
+use inquire::{InquireError, MultiSelect};
 use itertools::Itertools;
 
 pub fn prompt<F: Fn(&String) -> bool>(
     features: Vec<String>,
     enabled_features_predicate: F,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Option<Vec<String>>> {
     let selected_index = features
         .iter()
         .enumerate()
@@ -21,7 +22,7 @@ pub fn prompt<F: Fn(&String) -> bool>(
         clippy::cast_possible_wrap,
         reason = "Casting features index with a few hundered value maximum, so no risk of wrap"
     )]
-    Ok(inquire::MultiSelect::new("Enabled features", features)
+    match inquire::MultiSelect::new("Enabled features", features)
         .with_default(&selected_index)
         .with_page_size(50)
         .with_scorer(&|search_input, option, string_value, idx| {
@@ -32,5 +33,10 @@ pub fn prompt<F: Fn(&String) -> bool>(
                 MultiSelect::DEFAULT_SCORER(search_input, option, string_value, idx)
             }
         })
-        .prompt()?)
+        .prompt()
+    {
+        Ok(res) => Ok(Some(res)),
+        Err(InquireError::OperationCanceled) => Ok(None),
+        Err(e) => bail!(e),
+    }
 }

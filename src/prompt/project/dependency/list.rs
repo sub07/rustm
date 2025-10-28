@@ -2,39 +2,25 @@ use std::fmt::Display;
 
 use itertools::Itertools;
 
-use crate::project::Project;
-
 pub enum SelectOption {
-    Dep { name: String, is_crate_io: bool },
+    Dep { name: String },
     Back,
 }
 
 impl Display for SelectOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Dep {
-                name, is_crate_io, ..
-            } => {
-                if *is_crate_io {
-                    write!(f, "{name} (crates.io)")
-                } else {
-                    write!(f, "{name} (unsupported source)")
-                }
-            }
+            Self::Dep { name, .. } => write!(f, "{name}"),
+
             Self::Back => write!(f, "Back"),
         }
     }
 }
 
-pub fn prompt(project: &Project) -> anyhow::Result<SelectOption> {
-    let manifest = project.manifest()?;
-    let mut options = manifest
-        .dependencies
+pub fn prompt(deps: Vec<String>) -> anyhow::Result<SelectOption> {
+    let mut options = deps
         .into_iter()
-        .map(|(name, dep)| SelectOption::Dep {
-            name,
-            is_crate_io: dep.is_crates_io(),
-        })
+        .map(|name| SelectOption::Dep { name })
         .collect_vec();
 
     options.push(SelectOption::Back);

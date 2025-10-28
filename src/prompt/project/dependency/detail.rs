@@ -3,7 +3,6 @@ use std::fmt::Display;
 pub enum SelectOption {
     Features,
     SetDefaultFeatures(bool),
-    RestoreManifest,
     Back,
 }
 
@@ -18,7 +17,6 @@ impl Display for SelectOption {
                     write!(f, "Disable default features")
                 }
             }
-            Self::RestoreManifest => write!(f, "Restore manifest backup \u{26A0}"),
             Self::Back => write!(f, "Back"),
         }
     }
@@ -37,7 +35,6 @@ pub fn prompt(default_features_enabled: bool, has_features: bool) -> anyhow::Res
         options.push(SelectOption::SetDefaultFeatures(true));
     }
 
-    options.push(SelectOption::RestoreManifest);
     options.push(SelectOption::Back);
 
     Ok(inquire::Select::new("Choose action", options).prompt()?)
