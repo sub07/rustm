@@ -73,7 +73,7 @@ fn main() -> anyhow::Result<()> {
             View::Initial => handle!(initial),
             View::Global => handle!(global),
             View::ProjectList => handle!(project_list, &config),
-            View::Project(project) => handle!(project, project),
+            View::Project(project) => handle!(project, &config, project),
             View::NewProject => handle!(new_project, &config),
             View::ProjectDependencyList(project) => {
                 handle!(project_dependency_list, project, &crate_api);

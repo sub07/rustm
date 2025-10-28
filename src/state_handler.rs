@@ -75,11 +75,19 @@ pub fn project_list(config: &Config) -> ControlFlow {
     }
 }
 
-pub fn project(project: Project) -> ControlFlow {
+pub fn project(config: &Config, project: Project) -> ControlFlow {
     use crate::prompt::project::root::SelectOption;
     println!("{} [{}]", project.name, project.path.display());
     match prompt::project::root::prompt() {
         Ok(SelectOption::DependencyList) => view!(ProjectDependencyList(project)),
+        Ok(SelectOption::AddCrate) => todo!(),
+        Ok(SelectOption::OpenWithEditor) => {
+            if let Err(e) = project.open_in_editor(config.editor_cmd()) {
+                error!("Could not open project '{}' in editor: {e}", project.name);
+                eprintln!("Error opening project in editor (check the logs)");
+            }
+            view!(Project(project))
+        }
         Ok(SelectOption::GlobalMode) => view!(Global),
         Ok(SelectOption::RestoreManifest) => todo!(),
         Ok(SelectOption::Exit) => ControlFlow::Exit,
