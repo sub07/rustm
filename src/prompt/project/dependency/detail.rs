@@ -22,17 +22,23 @@ impl Display for SelectOption {
     }
 }
 
-pub fn prompt(default_features_enabled: bool, has_features: bool) -> anyhow::Result<SelectOption> {
+pub fn prompt(
+    default_features_enabled: bool,
+    has_features: bool,
+    has_raw_default_features: bool,
+) -> anyhow::Result<SelectOption> {
     let mut options = Vec::new();
 
     if has_features {
         options.push(SelectOption::Features);
     }
 
-    if default_features_enabled {
-        options.push(SelectOption::SetDefaultFeatures(false));
-    } else {
-        options.push(SelectOption::SetDefaultFeatures(true));
+    if has_raw_default_features {
+        if default_features_enabled {
+            options.push(SelectOption::SetDefaultFeatures(false));
+        } else {
+            options.push(SelectOption::SetDefaultFeatures(true));
+        }
     }
 
     options.push(SelectOption::Back);

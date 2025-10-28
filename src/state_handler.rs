@@ -10,14 +10,11 @@ use crate::{
     project::Project, prompt, state::View,
 };
 
-pub enum ControlFlow {
-    UpdateView(View),
-    Exit,
-}
+pub type ControlFlow = Option<View>;
 
 macro_rules! view {
     ($v:ident$($l:tt)?) => {
-        ControlFlow::UpdateView(crate::state::View::$v$($l)?)
+        Some(crate::state::View::$v$($l)?)
     };
 }
 
@@ -25,6 +22,14 @@ macro_rules! view {
 impl Dependency {
     fn default_features_enabled(&self) -> bool {
         self.detail().is_none_or(|detail| detail.default_features)
+    }
+
+    fn version(&self) -> Option<&str> {
+        match self {
+            Self::Simple(version) => Some(version.as_str()),
+            Self::Detailed(detail) => detail.version.as_deref(),
+            Self::Inherited(_) => None,
+        }
     }
 }
 
@@ -54,7 +59,7 @@ pub fn global() -> ControlFlow {
         Ok(SelectOption::CurrentProject(project)) => {
             view!(Project(project))
         }
-        Ok(SelectOption::Exit) => ControlFlow::Exit,
+        Ok(SelectOption::Exit) => None,
         Err(e) => {
             error!("Error in global prompt: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
@@ -90,7 +95,7 @@ pub fn project(config: &Config, project: Project) -> ControlFlow {
         }
         Ok(SelectOption::GlobalMode) => view!(Global),
         Ok(SelectOption::RestoreManifest) => todo!(),
-        Ok(SelectOption::Exit) => ControlFlow::Exit,
+        Ok(SelectOption::Exit) => None,
         Err(e) => {
             error!("Error in project root prompt: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
@@ -208,9 +213,20 @@ pub fn project_dependency_detail(project: Project, dep_crate_data: CrateData) ->
         }
     };
 
+    if let Some((dep_version, crate_version)) = dep
+        .version()
+        .and_then(|version| semver::Version::parse(version).log_ok())
+        .zip(semver::Version::parse(&dep_crate_data.latest_version).log_ok())
+        && dep_version < crate_version
+    {
+        println!("A new version is available: {dep_version} -> {crate_version}");
+    }
+    {}
+
     match prompt::project::dependency::detail::prompt(
         dep.default_features_enabled(),
         !dep_crate_data.features.is_empty(),
+        !dep_crate_data.raw_default_features.is_empty(),
     ) {
         Ok(SelectOption::Back) => view!(ProjectDependencyList(project)),
         Ok(SelectOption::Features) => {

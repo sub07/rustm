@@ -60,10 +60,10 @@ fn main() -> anyhow::Result<()> {
     macro_rules! handle {
         ($h:ident $(, $args:expr )* ) => {
             match crate::state_handler::$h($($args),*) {
-                crate::state_handler::ControlFlow::UpdateView(v) => {
+                Some(v) => {
                     view = v;
                 }
-                crate::state_handler::ControlFlow::Exit => return Ok(()),
+                None => return Ok(()),
             }
         };
     }
