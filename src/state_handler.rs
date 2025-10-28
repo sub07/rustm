@@ -6,15 +6,32 @@ use log::error;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
-    config::Config, crate_api::Client, crate_data::CrateData, manifest_editor::ManifestEditor,
-    project::Project, prompt, state::View,
+    config::Config,
+    crate_api::Client,
+    crate_data::CrateData,
+    manifest_editor::ManifestEditor,
+    project::Project,
+    prompt::{
+        self,
+        project::dependency::list::{NewVersionInfo, SelectDep},
+    },
+    state::View,
 };
 
-pub type ControlFlow = Option<View>;
+pub enum ControlFlow {
+    Continue(Box<View>),
+    Exit,
+}
 
 macro_rules! view {
     ($v:ident$($l:tt)?) => {
-        Some(crate::state::View::$v$($l)?)
+        ControlFlow::Continue(Box::new(View::$v$($l)?))
+    };
+}
+
+macro_rules! exit {
+    () => {
+        ControlFlow::Exit
     };
 }
 
@@ -59,7 +76,7 @@ pub fn global() -> ControlFlow {
         Ok(SelectOption::CurrentProject(project)) => {
             view!(Project(project))
         }
-        Ok(SelectOption::Exit) => None,
+        Ok(SelectOption::Exit) => exit!(),
         Err(e) => {
             error!("Error in global prompt: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
@@ -75,7 +92,7 @@ pub fn project_list(config: &Config) -> ControlFlow {
         Err(e) => {
             error!("Error in project list prompt: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
-            exit(1);
+            exit!()
         }
     }
 }
@@ -95,11 +112,11 @@ pub fn project(config: &Config, project: Project) -> ControlFlow {
         }
         Ok(SelectOption::GlobalMode) => view!(Global),
         Ok(SelectOption::RestoreManifest) => todo!(),
-        Ok(SelectOption::Exit) => None,
+        Ok(SelectOption::Exit) => exit!(),
         Err(e) => {
             error!("Error in project root prompt: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
-            exit(1);
+            exit!()
         }
     }
 }
@@ -118,41 +135,62 @@ pub fn new_project(config: &Config) -> ControlFlow {
         Err(e) => {
             error!("Error creating new project: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
-            exit(1);
+            exit!()
         }
     }
 }
 
+fn check_new_version(manifest_dep: &Dependency, crate_data: &CrateData) -> Option<NewVersionInfo> {
+    manifest_dep
+        .version()
+        .and_then(|version| semver::Version::parse(version).log_ok())
+        .zip(semver::Version::parse(&crate_data.latest_version).log_ok())
+        .filter(|(dep_version, crate_version)| dep_version < crate_version)
+        .map(|(dep_version, crate_version)| NewVersionInfo {
+            current_version: dep_version.to_string(),
+            latest_version: crate_version.to_string(),
+        })
+}
+
 pub fn project_dependency_list(project: Project, crate_api: &Client) -> ControlFlow {
     use crate::prompt::project::dependency::list::SelectOption;
-    let manifest = match project.manifest() {
+    let mut manifest = match project.manifest() {
         Ok(manifest) => manifest,
         Err(e) => {
             error!("Could not load manifest for project {}: {e}", project.name);
             eprintln!("Fatal error when loading project manifest (check the logs)");
-            exit(1);
+            return exit!();
         }
     };
 
-    let filtered_deps = manifest
+    manifest.dependencies.retain(|_, d| d.is_crates_io());
+
+    let deps = manifest
         .dependencies
         .into_par_iter()
-        .filter(|(_, dep)| dep.is_crates_io())
-        .map(|(name, _)| CrateData::from_name(crate_api, &name))
-        .filter_map(joy_error::ResultLogExt::log_ok)
-        .filter(|crate_data| !crate_data.features.is_empty())
-        .map(|crate_data| crate_data.name)
+        .map(|(name, dep)| (dep, CrateData::from_name(crate_api, &name)))
+        .filter_map(|(dep, crate_data_res)| crate_data_res.log_ok().zip(Some(dep)))
+        .filter(|(crate_data, _)| !crate_data.features.is_empty())
+        .map(|(crate_data, dep)| {
+            let new_version = check_new_version(&dep, &crate_data);
+            prompt::project::dependency::list::SelectDep {
+                name: crate_data.name,
+                new_version,
+            }
+        })
         .collect::<Vec<_>>();
 
-    match prompt::project::dependency::list::prompt(filtered_deps) {
-        Ok(SelectOption::Dep { name }) => match CrateData::from_name(crate_api, &name) {
-            Ok(data) => view!(ProjectDependencyDetail(project, data)),
-            Err(e) => {
-                println!("Could not fetch crate data");
-                error!("Could not fetch '{name}' crate data: {e}");
-                view!(ProjectDependencyList(project))
+    match prompt::project::dependency::list::prompt(deps) {
+        Ok(SelectOption::Dep(SelectDep { name, .. })) => {
+            match CrateData::from_name(crate_api, &name) {
+                Ok(data) => view!(ProjectDependencyDetail(project, data)),
+                Err(e) => {
+                    println!("Could not fetch crate data");
+                    error!("Could not fetch '{name}' crate data: {e}");
+                    view!(ProjectDependencyList(project))
+                }
             }
-        },
+        }
         Ok(SelectOption::Back) => view!(Project(project)),
         Err(e) => {
             error!("Error in dependency list prompt: {e}");
@@ -187,13 +225,13 @@ fn save_manifest_editor_or_exit(project: &Project, manifest_editor: &ManifestEdi
     }
 }
 
-pub fn project_dependency_detail(project: Project, dep_crate_data: CrateData) -> ControlFlow {
+pub fn project_dependency_detail(project: Project, crate_data: CrateData) -> ControlFlow {
     use crate::prompt::project::dependency::detail::SelectOption;
-    println!("{} - {}", dep_crate_data.name, project.name);
-    if !dep_crate_data.raw_default_features.is_empty() {
+    println!("{} - {}", crate_data.name, project.name);
+    if !crate_data.raw_default_features.is_empty() {
         println!("Default features: ");
-        for feature in &dep_crate_data.raw_default_features {
-            let is_feature_dep = !dep_crate_data.default_features.contains(feature);
+        for feature in &crate_data.raw_default_features {
+            let is_feature_dep = !crate_data.default_features.contains(feature);
             println!(
                 " - {feature} {}",
                 if is_feature_dep { "(Dependency)" } else { "" }
@@ -201,42 +239,40 @@ pub fn project_dependency_detail(project: Project, dep_crate_data: CrateData) ->
         }
     }
 
-    let dep = match project.dep(&dep_crate_data.name) {
+    let dep = match project.dep(&crate_data.name) {
         Ok(dep) => dep,
         Err(e) => {
             error!(
                 "Could not get dependency '{}' from project '{}': {e}",
-                dep_crate_data.name, project.name
+                crate_data.name, project.name
             );
             eprintln!("Fatal error when loading dependency data (check the logs)");
             exit(1);
         }
     };
 
-    if let Some((dep_version, crate_version)) = dep
-        .version()
-        .and_then(|version| semver::Version::parse(version).log_ok())
-        .zip(semver::Version::parse(&dep_crate_data.latest_version).log_ok())
-        && dep_version < crate_version
+    if let Some(NewVersionInfo {
+        current_version,
+        latest_version,
+    }) = check_new_version(&dep, &crate_data)
     {
-        println!("A new version is available: {dep_version} -> {crate_version}");
+        println!("A new version is available: {current_version} -> {latest_version}");
     }
-    {}
 
     match prompt::project::dependency::detail::prompt(
         dep.default_features_enabled(),
-        !dep_crate_data.features.is_empty(),
-        !dep_crate_data.raw_default_features.is_empty(),
+        !crate_data.features.is_empty(),
+        !crate_data.raw_default_features.is_empty(),
     ) {
         Ok(SelectOption::Back) => view!(ProjectDependencyList(project)),
         Ok(SelectOption::Features) => {
-            view!(ProjectDependencyFeatureToggle(project, dep_crate_data, dep))
+            view!(ProjectDependencyFeatureToggle(project, crate_data, dep))
         }
         Ok(SelectOption::SetDefaultFeatures(enabled)) => {
             let mut manifest_editor = load_manifest_editor_or_exit(&project);
-            manifest_editor.set_dep_features(&dep_crate_data.name, None, Some(enabled));
+            manifest_editor.set_dep_features(&crate_data.name, None, Some(enabled));
             save_manifest_editor_or_exit(&project, &manifest_editor);
-            view!(ProjectDependencyDetail(project, dep_crate_data))
+            view!(ProjectDependencyDetail(project, crate_data))
         }
         Err(e) => {
             error!("Error in dependency detail prompt: {e}");

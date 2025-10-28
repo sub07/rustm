@@ -55,21 +55,21 @@ fn main() -> anyhow::Result<()> {
     let config = init_config()?;
     let crate_api = crate_api::Client::new()?;
 
-    let mut view = View::Initial;
+    let mut view = Box::new(View::Initial);
 
     macro_rules! handle {
         ($h:ident $(, $args:expr )* ) => {
             match crate::state_handler::$h($($args),*) {
-                Some(v) => {
+                crate::state_handler::ControlFlow::Continue(v) => {
                     view = v;
                 }
-                None => return Ok(()),
+                crate::state_handler::ControlFlow::Exit => return Ok(()),
             }
         };
     }
 
     loop {
-        match view {
+        match *view {
             View::Initial => handle!(initial),
             View::Global => handle!(global),
             View::ProjectList => handle!(project_list, &config),
