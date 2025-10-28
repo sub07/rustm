@@ -60,16 +60,6 @@ pub struct Pagination {
     pub per_page: u64,
 }
 
-impl Pagination {
-    pub const fn page_count(self, total_item: u64) -> u64 {
-        if total_item == 0 {
-            1
-        } else {
-            (total_item - 1) / self.per_page + 1
-        }
-    }
-}
-
 impl Client {
     pub fn new() -> anyhow::Result<Self> {
         let client = reqwest::blocking::Client::builder()

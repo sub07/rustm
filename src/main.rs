@@ -5,8 +5,8 @@ mod logger;
 mod manifest_editor;
 mod project;
 mod prompt;
+mod service;
 mod state;
-mod state_handler;
 
 use std::path::PathBuf;
 
@@ -48,6 +48,7 @@ fn init_config() -> anyhow::Result<Config> {
 
     Config::load()
 }
+
 fn main() -> anyhow::Result<()> {
     init_dir()?;
     logger::init()?;
@@ -59,11 +60,11 @@ fn main() -> anyhow::Result<()> {
 
     macro_rules! handle {
         ($h:ident $(, $args:expr )* ) => {
-            match crate::state_handler::$h($($args),*) {
-                crate::state_handler::ControlFlow::Continue(v) => {
+            match crate::service::$h($($args),*) {
+                crate::service::ControlFlow::Continue(v) => {
                     view = v;
                 }
-                crate::state_handler::ControlFlow::Exit => return Ok(()),
+                crate::service::ControlFlow::Exit => return Ok(())
             }
         };
     }
