@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use assert_matches::debug_assert_matches;
+use log::info;
 use toml_edit::{DocumentMut, Item, Value};
 
 use crate::project::Project;
@@ -161,6 +162,17 @@ impl ManifestEditor {
         // std::fs::write("Cargo.test.toml", toml)?;
         std::fs::write(&self.manifest_path, toml)?;
         Ok(())
+    }
+
+    pub fn ensure_dep_section_exists(&mut self) {
+        if !self.data.as_table().contains_key("dependencies") {
+            self.data["dependencies"] = Item::Table(toml_edit::Table::new());
+        }
+    }
+
+    pub fn add_dep(&mut self, name: &str, version: &str) {
+        info!("Adding dependency {name} = {version}");
+        self.data["dependencies"][name] = toml_edit::value(version);
     }
 }
 

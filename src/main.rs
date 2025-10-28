@@ -89,6 +89,9 @@ fn main() -> anyhow::Result<()> {
                     &dependency
                 );
             }
+            View::ProjectAddDependency(project) => {
+                handle!(project_add_dependency, project, &crate_api);
+            }
         }
     }
 }

@@ -7,13 +7,16 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     config::Config,
-    crate_api::Client,
+    crate_api::{self, Client, Pagination},
     crate_data::CrateData,
     manifest_editor::ManifestEditor,
     project::Project,
     prompt::{
         self,
-        project::dependency::list::{NewVersionInfo, SelectDep},
+        project::dependency::{
+            list::{NewVersionInfo, SelectDep},
+            new::{CrateOption, PaginationOption},
+        },
     },
     state::View,
 };
@@ -102,7 +105,7 @@ pub fn project(config: &Config, project: Project) -> ControlFlow {
     println!("{} [{}]", project.name, project.path.display());
     match prompt::project::root::prompt() {
         Ok(SelectOption::DependencyList) => view!(ProjectDependencyList(project)),
-        Ok(SelectOption::AddCrate) => todo!(),
+        Ok(SelectOption::AddCrate) => view!(ProjectAddDependency(project)),
         Ok(SelectOption::OpenWithEditor) => {
             if let Err(e) = project.open_in_editor(config.editor_cmd()) {
                 error!("Could not open project '{}' in editor: {e}", project.name);
@@ -165,6 +168,7 @@ pub fn project_dependency_list(project: Project, crate_api: &Client) -> ControlF
 
     manifest.dependencies.retain(|_, d| d.is_crates_io());
 
+    // TODO: show dependencies even if they have no features - but disable the feature editing option
     let deps = manifest
         .dependencies
         .into_par_iter()
@@ -193,6 +197,7 @@ pub fn project_dependency_list(project: Project, crate_api: &Client) -> ControlF
         }
         Ok(SelectOption::Back) => view!(Project(project)),
         Err(e) => {
+            // TODO: Rework error handling
             error!("Error in dependency list prompt: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
             exit(1);
@@ -336,6 +341,128 @@ pub fn project_dependency_feature_toggle(
             error!("Error in dependency feature toggle prompt: {e}");
             eprintln!("Fatal error when showing user prompt (check the logs)");
             exit(1);
+        }
+    }
+}
+
+// TODO: split this
+pub fn project_add_dependency(project: Project, crate_api: &crate_api::Client) -> ControlFlow {
+    const DEFAULT_PAGINATION: crate_api::Pagination = Pagination {
+        page: 1,
+        per_page: 10,
+    };
+
+    let search_query = match prompt::project::dependency::new::prompt_search_query() {
+        Ok(Some(query)) => query,
+        Ok(None) => return view!(Project(project)),
+        Err(e) => {
+            error!("Error in add dependency search prompt: {e}");
+            eprintln!("Fatal error when showing user prompt (check the logs)");
+            return exit!();
+        }
+    };
+
+    let mut pagination = DEFAULT_PAGINATION;
+
+    loop {
+        let search_result = match crate_api.search_crates(&search_query, pagination) {
+            Ok(res) => res,
+            Err(e) => {
+                error!("Error searching crates for '{search_query}': {e:?}");
+                eprintln!("Could not search for crates");
+                return view!(Project(project));
+            }
+        };
+
+        if search_result.crates.is_empty() {
+            println!("No crates found for query '{search_query}'");
+            return view!(Project(project));
+        }
+
+        let total_item = search_result.meta.total;
+        let page_count = pagination.page_count(total_item);
+
+        println!(
+            "Page {}/{} Total: {}",
+            pagination.page, page_count, total_item
+        );
+
+        let search_result = search_result
+            .crates
+            .into_iter()
+            .map(|c| prompt::project::dependency::new::CrateOption {
+                name: c.name,
+                description: c.description.unwrap_or_default(),
+                version: c.default_version,
+                downloads: c.downloads,
+            })
+            .collect();
+
+        match prompt::project::dependency::new::prompt_paginated_select(
+            search_result,
+            pagination.page == 1,
+            pagination.page >= page_count,
+        ) {
+            Ok(action) => {
+                match action {
+                    PaginationOption::Crate(CrateOption { name, version, .. }) => {
+                        if project.dep(&name).is_ok() {
+                            println!("Dependency '{name}' is already present in the project");
+                            return view!(Project(project));
+                        }
+
+                        let mut manifest_editor = load_manifest_editor_or_exit(&project);
+                        manifest_editor.ensure_dep_section_exists();
+                        manifest_editor.add_dep(&name, &version);
+                        if let Err(e) = manifest_editor.save() {
+                            error!(
+                                "Could not add dependency to project '{}': {e}",
+                                project.name
+                            );
+                            eprintln!("Could not add dependency");
+                            return view!(Project(project));
+                        }
+
+                        println!("Dependency {name} = {version} added successfully");
+
+                        let Ok(crate_data) = CrateData::from_name(crate_api, &name).log_err()
+                        else {
+                            return view!(Project(project));
+                        };
+
+                        if crate_data.features.is_empty() {
+                            return view!(Project(project));
+                        }
+
+                        let edit_feature_now = prompt::project::dependency::new::prompt_confirmation_for_editing_feature().log_err().unwrap_or(false);
+                        return if edit_feature_now {
+                            let Ok(local_dep) = project.dep(&name).log_err() else {
+                                eprintln!("Could not load dependency after adding it");
+                                return view!(Project(project));
+                            };
+                            view!(ProjectDependencyFeatureToggle(
+                                project, crate_data, local_dep
+                            ))
+                        } else {
+                            view!(Project(project))
+                        };
+                    }
+                    PaginationOption::NextPage => {
+                        pagination.page = pagination.page.saturating_add(1);
+                        pagination.page = pagination.page.clamp(1, page_count);
+                    }
+                    PaginationOption::PreviousPage => {
+                        pagination.page = pagination.page.saturating_sub(1);
+                        pagination.page = pagination.page.clamp(1, page_count);
+                    }
+                    PaginationOption::Back => return view!(Project(project)),
+                }
+            }
+            Err(e) => {
+                error!("Error in add dependency paginated select prompt: {e}");
+                eprintln!("Fatal error when showing user prompt (check the logs)");
+                return exit!();
+            }
         }
     }
 }
