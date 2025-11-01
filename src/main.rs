@@ -20,7 +20,15 @@ use crate::{
 fn dir() -> anyhow::Result<PathBuf> {
     Ok(dirs::config_dir()
         .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?
-        .join("rustm"))
+        .join(
+            const {
+                if cfg!(debug_assertions) {
+                    "rustm-dev"
+                } else {
+                    "rustm"
+                }
+            },
+        ))
 }
 
 fn init_dir() -> anyhow::Result<()> {
