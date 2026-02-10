@@ -220,24 +220,24 @@ impl Project {
 
         let mut members = Vec::new();
         for member_glob in workspace.members {
-            // For simplicity, we'll just check direct subdirectories
-            // A full implementation would handle glob patterns
             let member_path = self.path.join(&member_glob);
+
+            // First try direct path (no glob pattern)
             if member_path.exists() && member_path.is_dir() {
                 if let Some(project) = Self::from_path(&member_path)? {
                     members.push(project);
                 }
             } else {
-                // Handle glob patterns by checking all directories
-                if let Some(parent) = self.path.join(&member_glob).parent() {
-                    if parent.exists() {
-                        for entry in std::fs::read_dir(parent)? {
-                            let entry = entry?;
-                            if entry.file_type()?.is_dir() {
-                                if let Some(project) = Self::from_path(entry.path())? {
-                                    members.push(project);
-                                }
-                            }
+                // Handle glob patterns using the glob crate
+                let glob_pattern = member_path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("Invalid path in workspace member: {}", member_glob))?;
+
+                for entry in glob::glob(glob_pattern)? {
+                    let path = entry?;
+                    if path.is_dir() {
+                        if let Some(project) = Self::from_path(&path)? {
+                            members.push(project);
                         }
                     }
                 }
