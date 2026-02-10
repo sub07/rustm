@@ -98,7 +98,12 @@ pub fn project_list(config: &Config) -> ControlFlow {
 
 pub fn project(config: &Config, project: Project) -> ControlFlow {
     use crate::prompt::project::root::SelectOption;
-    println!("{} [{}]", project.name, project.path.display());
+    println!(
+        "{} [{}] - {}",
+        project.name,
+        project.path.display(),
+        project.kind_description()
+    );
     match prompt::project::root::prompt() {
         Ok(SelectOption::DependencyList) => view!(ProjectDependencyList(project)),
         Ok(SelectOption::AddCrate) => view!(ProjectAddDependency(project)),
