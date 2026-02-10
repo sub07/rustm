@@ -36,6 +36,8 @@ pub struct AvailableActions {
     pub can_run_workspace_commands: bool,
     /// Can open individual members
     pub can_open_members: bool,
+    /// Can navigate back to workspace root
+    pub can_open_workspace_root: bool,
 }
 
 impl AvailableActions {
@@ -46,18 +48,21 @@ impl AvailableActions {
                 can_manage_members: true,
                 can_run_workspace_commands: true,
                 can_open_members: true,
+                can_open_workspace_root: false,
             },
             ProjectKind::WorkspaceMember => Self {
                 can_manage_dependencies: true,
                 can_manage_members: false,
                 can_run_workspace_commands: false,
                 can_open_members: false,
+                can_open_workspace_root: true,
             },
             ProjectKind::Standalone => Self {
                 can_manage_dependencies: true,
                 can_manage_members: false,
                 can_run_workspace_commands: false,
                 can_open_members: false,
+                can_open_workspace_root: false,
             },
         }
     }
@@ -76,6 +81,9 @@ impl AvailableActions {
         }
         if self.can_open_members {
             actions.push("Open workspace members");
+        }
+        if self.can_open_workspace_root {
+            actions.push("Open workspace root");
         }
         actions
     }
