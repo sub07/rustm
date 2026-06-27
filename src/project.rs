@@ -6,8 +6,7 @@ use std::{
 use anyhow::{anyhow, ensure};
 use cargo_toml::{Dependency, Manifest};
 use itertools::Itertools;
-use joy_error::ResultLogExt;
-use log::info;
+use log::{error, info};
 
 pub enum ProjectType {
     Binary,
@@ -49,7 +48,12 @@ impl Project {
             .filter_map(Result::ok)
             .filter_map(|e| e.file_type().ok().zip(Some(e)))
             .filter_map(|(file_type, entry)| file_type.is_dir().then_some(entry))
-            .filter_map(|entry| Self::from_path(entry.path()).log_ok().flatten())
+            .filter_map(|entry| {
+                Self::from_path(entry.path())
+                    .inspect_err(|e| error!("{e}"))
+                    .ok()
+                    .flatten()
+            })
             .collect_vec();
         Ok(projects)
     }

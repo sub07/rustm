@@ -1,4 +1,3 @@
-use joy_error::ResultLogExt;
 use log::error;
 
 use crate::{
@@ -103,7 +102,9 @@ fn add_dependency_and_maybe_edit_features(
 
     println!("Dependency {name} = {version} added successfully");
 
-    let Ok(crate_data) = CrateData::from_name(crate_api, name).log_err() else {
+    let Ok(crate_data) =
+        CrateData::from_name(crate_api, name).inspect_err(|e| error!("{e}"))
+    else {
         return view_project(project);
     };
 
@@ -112,14 +113,14 @@ fn add_dependency_and_maybe_edit_features(
     }
 
     let edit_now = prompt::project::dependency::new::prompt_confirmation_for_editing_feature()
-        .log_err()
+        .inspect_err(|e| error!("{e}"))
         .unwrap_or(false);
 
     if !edit_now {
         return view_project(project);
     }
 
-    let Ok(local_dep) = project.dep(name).log_err() else {
+    let Ok(local_dep) = project.dep(name).inspect_err(|e| error!("{e}")) else {
         eprintln!("Could not re-load dependency after adding it");
         return view_project(project);
     };

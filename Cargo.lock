@@ -620,15 +620,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
-name = "joy-error"
-version = "0.5.0"
-source = "git+https://github.com/sub07/rust-utils#d56e0b1fee39f6da7599e1abde6cbbc2d81378c8"
-dependencies = [
- "easy-ext",
- "log",
-]
-
-[[package]]
 name = "js-sys"
 version = "0.3.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1071,7 +1062,6 @@ dependencies = [
  "easy-ext",
  "inquire",
  "itertools",
- "joy-error",
  "log",
  "rayon",
  "reqwest",

@@ -5,19 +5,24 @@
   {
     "label": "run r",
     "command": "cargo",
-    "args": ["run"]
+    "args": ["run"],
   },
   {
     "label": "run 1",
     "command": "cargo",
     "args": ["run"],
     "env": {
-      "RUST_BACKTRACE": "1"
-    }
+      "RUST_BACKTRACE": "1",
+    },
   },
   {
     "label": "run t",
     "command": "cargo",
-    "args": ["test"]
-  }
+    "args": ["test"],
+  },
+  {
+    "label": "run b",
+    "command": "cargo",
+    "args": ["build"],
+  },
 ]

@@ -1,7 +1,6 @@
 use std::process::exit;
 
 use cargo_toml::Dependency;
-use joy_error::ResultLogExt;
 use log::error;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
@@ -142,8 +141,16 @@ pub fn new_project(config: &Config) -> ControlFlow {
 fn check_new_version(manifest_dep: &Dependency, crate_data: &CrateData) -> Option<NewVersionInfo> {
     manifest_dep
         .version()
-        .and_then(|version| semver::Version::parse(version).log_ok())
-        .zip(semver::Version::parse(&crate_data.latest_version).log_ok())
+        .and_then(|version| {
+            semver::Version::parse(version)
+                .inspect_err(|e| error!("{e}"))
+                .ok()
+        })
+        .zip(
+            semver::Version::parse(&crate_data.latest_version)
+                .inspect_err(|e| error!("{e}"))
+                .ok(),
+        )
         .filter(|(dep_version, crate_version)| dep_version < crate_version)
         .map(|(dep_version, crate_version)| NewVersionInfo {
             current_version: dep_version.to_string(),
@@ -169,7 +176,9 @@ pub fn project_dependency_list(project: Project, crate_api: &Client) -> ControlF
         .dependencies
         .into_par_iter()
         .map(|(name, dep)| (dep, CrateData::from_name(crate_api, &name)))
-        .filter_map(|(dep, crate_data_res)| crate_data_res.log_ok().zip(Some(dep)))
+        .filter_map(|(dep, crate_data_res)| {
+            crate_data_res.inspect_err(|e| error!("{e}")).ok().zip(Some(dep))
+        })
         .filter(|(crate_data, _)| !crate_data.features.is_empty())
         .map(|(crate_data, dep)| {
             let new_version = check_new_version(&dep, &crate_data);
