@@ -97,8 +97,13 @@ pub fn project_list(config: &Config) -> ControlFlow {
 
 pub fn project(config: &Config, project: Project) -> ControlFlow {
     use crate::prompt::project::root::SelectOption;
-    println!("{} [{}]", project.name, project.path.display());
-    match prompt::project::root::prompt() {
+    println!(
+        "{} [{}] - {}",
+        project.name,
+        project.path.display(),
+        project.kind_description()
+    );
+    match prompt::project::root::prompt(&project) {
         Ok(SelectOption::DependencyList) => view!(ProjectDependencyList(project)),
         Ok(SelectOption::AddCrate) => view!(ProjectAddDependency(project)),
         Ok(SelectOption::OpenWithEditor) => {
@@ -107,6 +112,24 @@ pub fn project(config: &Config, project: Project) -> ControlFlow {
                 eprintln!("Error opening project in editor (check the logs)");
             }
             view!(Project(project))
+        }
+        Ok(SelectOption::WorkspaceRoot) => {
+            match project.workspace_root() {
+                Ok(Some(workspace)) => {
+                    println!("Opening workspace root: {}", workspace.name);
+                    view!(Project(workspace))
+                }
+                Ok(None) => {
+                    error!("Could not find workspace root for project '{}'", project.name);
+                    eprintln!("Error: workspace root not found (check the logs)");
+                    view!(Project(project))
+                }
+                Err(e) => {
+                    error!("Error getting workspace root for project '{}': {e}", project.name);
+                    eprintln!("Error getting workspace root (check the logs)");
+                    view!(Project(project))
+                }
+            }
         }
         Ok(SelectOption::GlobalMode) => view!(Global),
         Ok(SelectOption::RestoreManifest) => todo!(),
